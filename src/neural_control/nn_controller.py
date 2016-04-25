@@ -22,11 +22,14 @@ It is critical that under abnormal operation, the neural
 network's learning is haulted. The controller subscribes
 to the topic /nnc_learn (ROS std bool message) to either
 start/continue learning (True) or hault learning (False).
-It initializes True. Some situations in which you want
+It initializes False. Some situations in which you want
 to hault and later resume learning are if:
 - any actuators are saturated (seriously)
 - someone is harassing the robot
 - your submarine is surfacing
+
+Publish True to the topic /nnc_reset (ROS std bool message)
+to clear the NN back to zero weights.
 
 If you want to not use the neural network portion of this
 controller, manually override the attribute just_PD = True.
@@ -130,12 +133,15 @@ class NN_controller:
 		if self.dof == 6:
 			self.unpack = self.unpack_6dof
 			self.vectorize = lambda arr: arr
+			self.unvectorize = lambda vec: vec
 		elif self.dof == 3:
 			self.unpack = self.unpack_3dof
-			self.vectorize = lambda arr: np.concatenate((arr[:2], np.zeros(3), arr[2]))
+			self.vectorize = lambda arr: np.concatenate((arr[:2], np.zeros(3), [arr[2]]))
+			self.unvectorize = lambda vec: np.concatenate((vec[:2], [vec[5]]))
 		elif self.dof == 2:
 			self.unpack = self.unpack_2dof
 			self.vectorize = lambda arr: np.concatenate((arr, np.zeros(4)))
+			self.unvectorize = lambda vec: vec[:2]
 		else:
 			raise ValueError("Unsupported dof number requested.")
 
@@ -146,24 +152,27 @@ class NN_controller:
 		# Memory initializations
 		self.dt = 0  # time since last call
 		self.last_timestamp = 0  # previous call's timestamp
-		self.reset_learning()  # initializes NN weights to zeros
+		self.reset_learning(Bool(data=True))  # initializes NN weights to zeros
 
 		# Flags
-		self.learn = True
+		self.learn = False
 		self.just_PD = False
 		self._got_first_reference = False
 
 		# ROS
 		rospy.Subscriber('/nnc_learn', Bool, self.toggle_learning)
+		rospy.Subscriber('/nnc_reset', Bool, self.reset_learning)
 		self.wrench_pub = rospy.Publisher(wrench_topic, WrenchStamped, queue_size=0)
 		self.neuralwrench_pub = rospy.Publisher(neuralwrench_topic, WrenchStamped, queue_size=0)
+
+		print("NN controller active.\nReady to begin learning.")
 
 ########################
 
 	def get_wrench(self):
 		"""
-		Publishes wrench for this instant. Also publishes
-		the neural network component of said wrench.
+		Publishes and returns wrench for this instant. Also
+		publishes the neural network component of said wrench.
 
 		"""
 		# Translational component of positional error, converted to body frame
@@ -190,8 +199,8 @@ class NN_controller:
 			if self.learn:
 				# Compute weight rates-of-change
 				VTx = self.V.T.dot(self.x)
-				Wdot = self.kw * (np.outer(self.sig(VTx), E_tra))
-				Vdot = self.kv * (np.outer(self.x, E_tra).dot(self.W.T).dot(self.sigp(VTx)))
+				Wdot = self.kw * (np.outer(self.sig(VTx), self.unvectorize(E_tra)))
+				Vdot = self.kv * (np.outer(self.x, self.unvectorize(E_tra)).dot(self.W.T).dot(self.sigp(VTx)))
 				# Step weights forward
 				self.W = self.W + (Wdot * self.dt)
 				self.V = self.V + (Vdot * self.dt)
@@ -204,7 +213,7 @@ class NN_controller:
 		# Construct total wrench and publish
 		wrench = WrenchStamped()
 		wrench.header.frame_id = '/base_link'
-		wrench.header.stamp = rospy.get_rostime()
+		wrench.header.stamp = rospy.Time.from_sec(self.last_timestamp)
 		wrench.wrench.force.x = self.u[0]
 		wrench.wrench.force.y = self.u[1]
 		wrench.wrench.force.z = self.u[2]
@@ -216,7 +225,7 @@ class NN_controller:
 		# Also publish neural network component alone
 		neuralwrench = WrenchStamped()
 		neuralwrench.header.frame_id = '/base_link'
-		neuralwrench.header.stamp = rospy.get_rostime()
+		neuralwrench.header.stamp = rospy.Time.from_sec(self.last_timestamp)
 		neuralwrench.wrench.force.x = self.y[0]
 		neuralwrench.wrench.force.y = self.y[1]
 		neuralwrench.wrench.force.z = self.y[2]
@@ -224,6 +233,8 @@ class NN_controller:
 		neuralwrench.wrench.torque.y = self.y[4]
 		neuralwrench.wrench.torque.z = self.y[5]
 		self.neuralwrench_pub.publish(neuralwrench)
+
+		return self.u
 
 ########################
 
@@ -304,14 +315,18 @@ class NN_controller:
 
 ########################
 
-	def reset_learning(self):
+	def reset_learning(self, bool_msg):
 		"""
 		Use this function to reset all NN weights to zeros.
 
 		"""
-		self.V = np.zeros((2*self.dof + 1, self.N))  # input-side weights
-		self.W = np.zeros((self.N + 1, self.dof))  # output-side weights
-		self.y = np.zeros(6)  # neural network wrench (body frame)
+		if bool_msg.data:
+			print("NN controller reset.")
+			self.V = np.zeros((2*self.dof + 1, self.N))  # input-side weights
+			self.W = np.zeros((self.N + 1, self.dof))  # output-side weights
+			# self.V = np.zeros((2*6 + 1, self.N))  # input-side weights
+			# self.W = np.zeros((self.N + 1, 6))  # output-side weights
+			self.y = np.zeros(6)  # neural network wrench (body frame)
 
 ########################
 
@@ -408,7 +423,8 @@ class NN_controller:
 		v = np.array([linvel_body.x, linvel_body.y, 0])
 		w = np.array([0, 0, angvel_body.z])
 		yaw = trns.euler_from_quaternion(q)[2]
-		x = np.concatenate(([1], p[:2], [yaw], R.dot(v)[:2], R.dot(w)[2]))
+		x = np.concatenate(([1], p[:2], [yaw], R.dot(v)[:2], [R.dot(w)[2]]))
+		# x = np.concatenate(([1], p[:2], [0], [0, 0, yaw], R.dot(v)[:2], [0], [0, 0, R.dot(w)[2]]))
 		return (p, q, R, v, w, x)
 
 ########################
@@ -420,4 +436,5 @@ class NN_controller:
 		v = np.array([linvel_body.x, linvel_body.y, 0])
 		w = np.zeros(3)
 		x = np.concatenate(([1], p[:2], v[:2]))
+		# x = np.concatenate(([1], p[:2], [0], v[:2], np.zeros(7)))
 		return (p, q, R, v, w, x)

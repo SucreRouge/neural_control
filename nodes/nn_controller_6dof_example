@@ -6,6 +6,7 @@ Example node for using the nn_controller for a 6 DOF robot.
 
 import rospy
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Bool
 from neural_control.msg import PoseTwistStamped
 from neural_control.nn_controller import NN_controller
 
@@ -21,8 +22,11 @@ def reference_callback(ref_msg):
 	controller.give_new_reference(pose, twist)
 
 controller = NN_controller(dof=6, kp=[100]*6, kd=[100]*6, kv=10, kw=10, N=10, sig='tanh', nn_limit=[10**10]*6)
-
 rospy.init_node('controller')
+
+nnc_toggler = rospy.Publisher('/nnc_learn', Bool, queue_size=100)
+nnc_toggler.publish(Bool(data=True))
+
 rospy.Subscriber('/odom', Odometry, odom_callback)
 rospy.Subscriber('/trajectory', PoseTwistStamped, reference_callback)
 
