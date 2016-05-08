@@ -45,12 +45,11 @@ catkin_python_setup()
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-# Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  PoseTwist.msg
-  PoseTwistStamped.msg
-)
+## Generate messages in the 'msg' folder
+#add_message_files(
+#  FILES
+#  MessageName.msg
+#)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -66,11 +65,11 @@ add_message_files(
 #   Action2.action
 # )
 
-# Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  geometry_msgs#   nav_msgs#   std_msgs
-)
+## Generate added messages and services with any dependencies listed here
+#generate_messages(
+#  DEPENDENCIES
+#  geometry_msgs#   nav_msgs#   std_msgs
+#)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
