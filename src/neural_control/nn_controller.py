@@ -5,7 +5,7 @@ Neural Network Controller
 --- USAGE ---
 
 Use give_new_state and give_new_reference as explained in
-the example nodes. They will upack data and call get_wrench,
+the example nodes. They will unpack data and call get_wrench,
 which will publish a wrench that best tends the current state
 to the reference state.
 
@@ -189,11 +189,8 @@ class NN_controller:
 
 		# Control law
 		if self.just_PD:
-
 			self.u = self.kp*E_pos + self.kd*E_vel
-		
 		else:
-
 			self.u = self.kp*E_pos + self.kd*E_vel + self.y
 
 			# Adapt NN
