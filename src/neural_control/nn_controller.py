@@ -197,11 +197,11 @@ class NN_controller:
 			if self.learn:
 				# Compute weight rates-of-change
 				VTx = self.V.T.dot(self.x)
-				Wdot = self.kw * (np.outer(self.sig(VTx), self.unvectorize(E_tra)))
-				Vdot = self.kv * (np.outer(self.x, self.unvectorize(E_tra)).dot(self.W.T).dot(self.sigp(VTx)))
+				Wdot = np.outer(self.sig(VTx), self.unvectorize(E_tra))
+				Vdot = np.outer(self.x, self.unvectorize(E_tra)).dot(self.W.T).dot(self.sigp(VTx))
 				# Step weights forward
-				self.W = self.W + (Wdot * self.dt)
-				self.V = self.V + (Vdot * self.dt)
+				self.W = self.W + self.kw*Wdot*self.dt
+				self.V = self.V + self.kv*Vdot*self.dt
 				# Vectorize the NN output (still in world frame)
 				y_world = self.vectorize(self.W.T.dot(self.sig(self.V.T.dot(self.x))))
 				# Convert to body frame and clip

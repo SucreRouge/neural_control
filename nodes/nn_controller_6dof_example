@@ -21,7 +21,7 @@ def reference_callback(ref_msg):
 	twist = ref_msg.twist
 	controller.give_new_reference(pose, twist)
 
-controller = NN_controller(dof=6, kp=[100]*6, kd=[100]*6, kv=10, kw=10, N=10, sig='tanh', nn_limit=[10**10]*6)
+controller = NN_controller(dof=6, kp=[100]*6, kd=[100]*6, kv=1, kw=1, N=10, sig='tanh', nn_limit=[10**3]*6)
 rospy.init_node('controller')
 
 nnc_toggler = rospy.Publisher('/nnc_learn', Bool, queue_size=100)
