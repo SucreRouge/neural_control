@@ -1,4 +1,6 @@
 # nn_control
 Neural Network Controller and Observer for Mobile Robots
 
-(not done at all)
+Project on hold for now.
+
+(observer isn't done and controller hasn't been completely tested)
